@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Nifty 50 port of "A Transformer-Based Probabilistic Trading Strategy" (QuantWolf, 2025-04-08).
+Nifty 50 port of "A Transformer-Based Probabilistic Trading Strategy"
 
-The blog's single-stock (AAPL) pipeline is run unchanged for every Nifty 50 stock:
+The blog's is run for every Nifty 50 stock:
 own data -> own features -> own model -> own 80/20 temporal split -> own SL/TP backtest.
 Each stock is an independent capital "sleeve"; the portfolio curve is the sum of sleeves and is
 compared against a Nifty 50 index (^NSEI) buy-and-hold benchmark.
@@ -25,21 +25,21 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.metrics import roc_auc_score
 import matplotlib.pyplot as plt
 
-# ===================== CONFIG (blog values unless noted) =====================
+# ===================== CONFIG =====================
 START_DATE = "2020-01-01"        # same as the blog's start
-END_DATE = None                  # blog: 2023-12-31 (here: None = latest available)
+END_DATE = None                  
 BENCHMARK = "^NSEI"              # added: Nifty 50 index, price return
 SEQ_LEN = 20
-TEST_START = "2024-07-01"        # blog: last 20% of the data. Here: a fixed date, giving 2+ years of test
+TEST_START = "2024-07-01"        
 MIN_TRAIN_SEQS = 300             # skip stocks with too little history before TEST_START (recent listings)
 EPOCHS = 20
 BATCH_SIZE = 32
 LR = 0.001
-THRESHOLD = 0.5                  # blog's F1 threshold search never leaves 0.5 (see README)
+THRESHOLD = 0.5                  
 SL_PCT, TP_PCT = -0.02, 0.04
-MAX_HOLD = 5                     # blog: 5-day holding window
+MAX_HOLD = 5                    
 INITIAL_CASH = 100_000           # per stock sleeve (blog: 10,000, same 10% position ratio)
-POSITION_SIZE = 10_000           # per trade (blog: 1,000)
+POSITION_SIZE = 10_000           # per trade 
 
 NIFTY50 = [
     "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS",
@@ -94,7 +94,7 @@ def create_sequences(X, y, seq_len):
 
 def load_close(ticker):
     df = yf.download(ticker, start=START_DATE, end=END_DATE, progress=False)
-    if isinstance(df.columns, pd.MultiIndex):          # blog: flatten multi-level columns
+    if isinstance(df.columns, pd.MultiIndex):          # flatten multi-level columns
         df.columns = [col[0] for col in df.columns]
     return df
 
@@ -189,7 +189,7 @@ if __name__ == "__main__":
         df = build_features(raw)
         features = df[["Return", "Momentum", "RSI", "MACD_diff"]].values
         targets = (df["Close"].shift(-1) > df["Close"]).astype(int).values
-        features, targets = features[:-1], targets[:-1]            # blog: drop last row
+        features, targets = features[:-1], targets[:-1]            # drop last row
         X_seq, y_seq = create_sequences(features, targets, SEQ_LEN)
 
         n = len(X_seq)
@@ -221,10 +221,10 @@ if __name__ == "__main__":
         with torch.no_grad():
             probs = model(torch.tensor(X_test, dtype=torch.float32)).numpy().flatten()
 
-        last = X_test[:, -1, :]                                    # last timestep only (blog Step 7)
+        last = X_test[:, -1, :]                                    # last timestep only 
         entry_signal = (probs > THRESHOLD) & (last[:, 2] > 50) & (last[:, 3] > 0)
 
-        # blog: test_start_idx = len(df) - len(entry_signal) - 1  (== split + SEQ_LEN)
+        # test_start_idx = len(df) - len(entry_signal) - 1  (== split + SEQ_LEN)
         start = len(df) - len(entry_signal) - 1
         close_prices = df["Close"].values[start:]
         dates = df.index[start:]
@@ -276,7 +276,7 @@ if __name__ == "__main__":
         "Benchmark_Max_Drawdown_pct": round(b_dd, 2),
         "Excess_Return_vs_Benchmark_pct": round(tot - b_tot, 2),
     }
-    print("\n========== PORTFOLIO RESULTS (blog method, date split) ==========")
+    print("\n========== PORTFOLIO RESULTS  ==========")
     for k, v in metrics.items():
         print(f"{k}: {v}")
 
