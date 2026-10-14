@@ -1,2 +1,0 @@
-Stocks_Modeled,Stocks_Skipped,Capital_Per_Stock_INR,Total_Capital_INR,Final_Value_INR,Total_Return_pct,CAGR_pct,Sharpe,Max_Drawdown_pct,Win_Rate_pct,Total_Trades,Winning_Trades,Train_End_Before,Test_Start,Test_End,Benchmark,Benchmark_Total_Return_pct,Benchmark_CAGR_pct,Benchmark_Sharpe,Benchmark_Max_Drawdown_pct,Excess_Return_vs_Benchmark_pct
-49,1,100000,4900000,5014071.03,2.33,1.03,1.46,0.73,45.52,7274,3311,2024-07-01,2024-07-01,2026-10-12,^NSEI,-7.37,-3.35,-0.2,15.77,9.7
