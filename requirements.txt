@@ -1,7 +1,0 @@
-yfinance
-torch
-pandas
-numpy
-scikit-learn
-matplotlib
-ta
