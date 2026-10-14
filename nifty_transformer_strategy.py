@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Nifty 50 port of "A Transformer-Based Probabilistic Trading Strategy"
+Transformer-Based Probabilistic Trading Strategy on the Nifty 50.
 
-The blog's is run for every Nifty 50 stock:
-own data -> own features -> own model -> own 80/20 temporal split -> own SL/TP backtest.
-Each stock is an independent capital "sleeve"; the portfolio curve is the sum of sleeves and is
-compared against a Nifty 50 index (^NSEI) buy-and-hold benchmark.
+One transformer classifier per stock predicts the next-day up-move; stop-loss / take-profit /
+time-exit rules turn the predictions into trades. Each stock is an independent capital "sleeve";
+the portfolio curve is the sum of sleeves and is compared against a Nifty 50 index (^NSEI)
+buy-and-hold benchmark.
 
 Data window: 2020-01-01 -> latest available date. Models train on data before TEST_START and are
-tested from that date on (more than two years), instead of the blog's fixed 80/20 split.
+tested from that date on (more than two years).
 """
 
 import os
@@ -26,20 +26,21 @@ from sklearn.metrics import roc_auc_score
 import matplotlib.pyplot as plt
 
 # ===================== CONFIG =====================
-START_DATE = "2020-01-01"        # same as the blog's start
-END_DATE = None                  
+START_DATE = "2020-01-01"        # training history starts here
+END_DATE = None                  # None = latest available date
 BENCHMARK = "^NSEI"              # added: Nifty 50 index, price return
 SEQ_LEN = 20
-TEST_START = "2024-07-01"        
+TEST_START = "2024-07-01"        # train before this date, test from it onward (2+ years)
 MIN_TRAIN_SEQS = 300             # skip stocks with too little history before TEST_START (recent listings)
 EPOCHS = 20
 BATCH_SIZE = 32
 LR = 0.001
-THRESHOLD = 0.5                  
+THRESHOLD = 0.5                  # entry probability threshold
 SL_PCT, TP_PCT = -0.02, 0.04
-MAX_HOLD = 5                    
-INITIAL_CASH = 100_000           # per stock sleeve (blog: 10,000, same 10% position ratio)
-POSITION_SIZE = 10_000           # per trade 
+MAX_HOLD = 5                     # maximum holding period in trading days
+ALLOW_OVERLAP = False            # False: at most one open position per stock at a time
+INITIAL_CASH = 100_000           # per stock sleeve (INR)
+POSITION_SIZE = 10_000           # per trade, 10% of a sleeve (INR)
 
 NIFTY50 = [
     "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS",
@@ -57,7 +58,7 @@ NIFTY50 = [
 os.makedirs("results", exist_ok=True)
 
 
-# ===================== MODEL (identical to blog) =====================
+# ===================== MODEL =====================
 class TransformerBinaryClassifier(nn.Module):
     def __init__(self, input_dim, seq_len, d_model=32, nhead=4, num_layers=2):
         super().__init__()
@@ -108,19 +109,23 @@ def build_features(df):
     return df.dropna()
 
 
-# ===================== BACKTEST (blog Step 8 logic) =====================
-def blog_backtest(ticker, dates, close_prices, entry_signal):
+# ===================== BACKTEST =====================
+def run_backtest(ticker, dates, close_prices, entry_signal):
     """
-    Same indexing as the blog: signal i -> buy close_prices[i+1]; then for j=1..5 check close
-    close_prices[i+j+1] for TP (+4%) / SL (-2%), else exit at the day-5 close.
-    TP/SL fill exactly at the threshold (blog: cash += size * tp_pct / sl_pct).
-    The last signal is skipped (blog: range(len(entry_signal)-1)).
-    Difference from blog: PnL is booked on the EXIT date so the equity curve has a real date axis.
+    Signal i buys close_prices[i+1]; then for j=1..5 the close close_prices[i+j+1] is checked for
+    take-profit (+4%) / stop-loss (-2%), otherwise the position exits at the day-5 close.
+    TP/SL fill exactly at the threshold. The last signal is skipped (no later prices).
+    With ALLOW_OVERLAP = False a stock holds one position at a time: signals while a position is
+    open are ignored, and a new entry must be on a later day than the previous exit.
+    PnL is booked on the EXIT date so the equity curve has a real date axis.
     """
     trades = []
     n = len(close_prices)
+    last_exit = -1
     for i in range(len(entry_signal) - 1):
         if not entry_signal[i]:
+            continue
+        if not ALLOW_OVERLAP and i + 1 <= last_exit:
             continue
         buy_price = close_prices[i + 1]
         entry_date = dates[i + 1]
@@ -142,6 +147,7 @@ def blog_backtest(ticker, dates, close_prices, entry_signal):
             exit_idx = i + MAX_HOLD + 1
             pct = (close_prices[exit_idx] - buy_price) / buy_price
             reason = "TIME"
+        last_exit = exit_idx
         trades.append({
             "ticker": ticker, "signal_date": dates[i], "entry_date": entry_date,
             "exit_date": dates[exit_idx], "entry_px": buy_price,
@@ -189,11 +195,11 @@ if __name__ == "__main__":
         df = build_features(raw)
         features = df[["Return", "Momentum", "RSI", "MACD_diff"]].values
         targets = (df["Close"].shift(-1) > df["Close"]).astype(int).values
-        features, targets = features[:-1], targets[:-1]            # drop last row
+        features, targets = features[:-1], targets[:-1]            # drop last row (no next-day label)
         X_seq, y_seq = create_sequences(features, targets, SEQ_LEN)
 
         n = len(X_seq)
-        # date-based split: sequence k is dated at row k+SEQ_LEN (same alignment as the blog's test dates)
+        # date-based split: sequence k is dated at row k+SEQ_LEN
         seq_dates = df.index[SEQ_LEN: SEQ_LEN + n]
         split = int((seq_dates < pd.Timestamp(TEST_START)).sum())
         n_test = n - split
@@ -221,15 +227,15 @@ if __name__ == "__main__":
         with torch.no_grad():
             probs = model(torch.tensor(X_test, dtype=torch.float32)).numpy().flatten()
 
-        last = X_test[:, -1, :]                                    # last timestep only 
+        last = X_test[:, -1, :]                                    # last timestep only
         entry_signal = (probs > THRESHOLD) & (last[:, 2] > 50) & (last[:, 3] > 0)
 
-        # test_start_idx = len(df) - len(entry_signal) - 1  (== split + SEQ_LEN)
+        # first test price row: len(df) - len(entry_signal) - 1  (== split + SEQ_LEN)
         start = len(df) - len(entry_signal) - 1
         close_prices = df["Close"].values[start:]
         dates = df.index[start:]
 
-        trades = blog_backtest(ticker, dates, close_prices, entry_signal)
+        trades = run_backtest(ticker, dates, close_prices, entry_signal)
         all_trades.extend(trades)
         sleeves[ticker] = sleeve_equity(dates, trades)
 
@@ -255,7 +261,7 @@ if __name__ == "__main__":
     total_cap = INITIAL_CASH * len(sleeves)
 
     bench = bench_raw["Close"].reindex(port.index).ffill().dropna()
-    bench = total_cap * bench / bench.iloc[0]                      # rebased to same total capital
+    bench = total_cap * bench / bench.iloc[0]                      
 
     tot, cagr, sharpe, maxdd, dd = perf_stats(port)
     b_tot, b_cagr, b_sharpe, b_dd, b_ddser = perf_stats(bench)
@@ -276,7 +282,7 @@ if __name__ == "__main__":
         "Benchmark_Max_Drawdown_pct": round(b_dd, 2),
         "Excess_Return_vs_Benchmark_pct": round(tot - b_tot, 2),
     }
-    print("\n========== PORTFOLIO RESULTS  ==========")
+    print("\n========== PORTFOLIO RESULTS (date split) ==========")
     for k, v in metrics.items():
         print(f"{k}: {v}")
 
