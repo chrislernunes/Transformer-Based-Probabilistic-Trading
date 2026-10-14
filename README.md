@@ -1,4 +1,4 @@
-# Transformer-Based Probabilistic Trading Strategy on the Nifty 50
+# Transformer-Based Probabilistic Trading Strategy on AAPL & PLTR
 
 A transformer classifier is trained per stock to predict the next day's direction; fixed exit rules turn
 the predictions into trades. Each stock is an independent capital sleeve and the portfolio is the sum of
@@ -17,9 +17,4 @@ the sleeves, compared with a Nifty 50 (^NSEI) buy-and-hold benchmark.
 - PnL is booked on the exit date. A trade opens two trading days after the last day in the model's input
   window, one day after the move the label refers to.
 
-## Run
-pip install -r requirements.txt
-python nifty_transformer_strategy.py
-
-Outputs go to results/: portfolio_metrics.csv, equity_curve.csv/.png, trades.csv, signal_summary.csv
-(per-stock test accuracy and AUC). Research only, not investment advice.
+Research only, not investment advice.
