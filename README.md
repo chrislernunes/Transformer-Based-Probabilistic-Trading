@@ -4,8 +4,7 @@ A transformer classifier trained on AAPL daily bars. It scores the probability t
 
 The source of the numbers below is [`A_Transformer_Based_Probabilistic_Trading_Strategy.ipynb`](A_Transformer_Based_Probabilistic_Trading_Strategy.ipynb). The write-up is published at [chrislernunes.github.io/Transformer-Based-Probabilistic-Trading](https://chrislernunes.github.io/Transformer-Based-Probabilistic-Trading/).
 
-[`Transformer_with_Probabilistic_Output.ipynb`](Transformer_with_Probabilistic_Output.ipynb) is an earlier PLTR variant that uses only return and momentum. It is not the run reported here. The `results/` folder is the earlier Nifty 50 portfolio and is not the output of the AAPL notebook.
-
+[`Transformer_with_Probabilistic_Output.ipynb`](Transformer_with_Probabilistic_Output.ipynb) is an earlier PLTR variant that uses only return and momentum. It is not the run reported here.
 ## This run
 
 | | |
